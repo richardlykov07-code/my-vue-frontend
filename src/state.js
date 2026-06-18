@@ -1,107 +1,74 @@
 import { createStore } from "vuex";
+import router from "./router";
 
 export default createStore({
   state() {
     return {
-      // --- ПЕРЕМЕННЫЕ ИЗ ЛАБОРАТОРНОЙ №2 (АВТОРИЗАЦИЯ) ---
       token: localStorage.getItem('token') || '',
       user: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')) : null,
       loggedIn: !!localStorage.getItem('token'),
       preLoading: false,
+      dataPreLoading: false,
       loginError: false,
-      backendUrl: 'http://localhost:8080', // Адрес твоего CodeIgniter бэкенда
-
-      // --- НОВЫЕ ПЕРЕМЕННЫЕ ИЗ ЛАБОРАТОРНОЙ №3 (ПАГИНАЦИЯ И ПОИСК) ---
-      rating: [], // Сюда прилетают отфильтрованные строки рейтинга
-      search: '', // Переменная из пункта 3.9 для хранения строки поиска
-      pager: {
-        currentPage: 1, // Текущая активная страница
-        pageCount: 1,   // Сколько всего страниц насчитал бэкенд
-        perPage: 10     // Количество записей на одну страницу
-      }
+      backendUrl: 'http://localhost:8080',
+      // Наш реактивный массив карточек
+      rating: localStorage.getItem('mock_ratings') ? JSON.parse(localStorage.getItem('mock_ratings')) : [
+        { id: 1, name: 'Тимофей', description: 'Лучший установщик кондиционеров', gender: 'male', birthday: '2020-01-15' },
+        { id: 2, name: 'Елизавета', description: 'Менеджер по работе с клиентами', gender: 'female', birthday: '2017-05-20' },
+        { id: 3, name: 'Ваня', description: 'Старший бригадир', gender: 'male', birthday: '2025-05-10' },
+        { id: 4, name: 'Артем', description: 'Мастер алмазного бурения', gender: 'male', birthday: '2026-06-07' }
+      ],
+      search: '', 
+      ratingItem: { id: 0, name: '', description: '', gender: 'male', birthday: '' },
+      pager: { currentPage: 1, pageCount: 1, perPage: 5, total: 4 }
     };
   },
   mutations: {
-    // --- МУТАЦИИ АВТОРИЗАЦИИ ---
-    setToken(state, token) {
-      state.token = token;
-      localStorage.setItem('token', token);
-    },
-    setUser(state, user) {
-      state.user = user;
-      localStorage.setItem('user', JSON.stringify(user));
-    },
-    setPreLoading(state, is_load) {
-      state.preLoading = is_load;
-    },
-    setLoginError(state, isError) {
-      state.loginError = isError;
-    },
-    setLoggedIn(state, isLoggedIn) {
-      state.loggedIn = isLoggedIn;
-    },
-
-    // --- МУТАЦИИ ПАГИНАЦИИ И ПОИСКА (Исправлен баг методички с context) ---
-    setRating(state, rating) {
-      state.rating = rating;
-    },
-    setPager(state, pager) {
-      state.pager = pager;
-    },
-    setSearch(state, search) {
-      // Добавили мутацию для безопасного изменения строки поиска из v-model
-      state.search = search;
-    }
+    setToken(state, token) { state.token = token; localStorage.setItem('token', token); },
+    setUser(state, user) { state.user = user; localStorage.setItem('user', JSON.stringify(user)); },
+    setPreLoading(state, is_load) { state.preLoading = is_load; },
+    setDataPreLoading(state, is_load) { state.dataPreLoading = is_load; },
+    setLoginError(state, isError) { state.loginError = isError; },
+    setLoggedIn(state, isLoggedIn) { state.loggedIn = isLoggedIn; },
+    setRating(state, rating) { state.rating = rating; localStorage.setItem('mock_ratings', JSON.stringify(rating)); state.pager.total = rating.length; },
+    setPager(state, pager) { state.pager = pager; },
+    setPage(state, page) { state.pager.currentPage = page; }
   },
   actions: {
-    // --- ДЕЙСТВИЕ АВТОРИЗАЦИИ (ИЗ ЛАБЫ №2) ---
-    auth({ commit, state }, payload) {
-      commit('setPreLoading', true);
-      commit('setLoginError', false);
-
-      const params = new URLSearchParams();
-      params.append('login', payload.login);
-      params.append('password', payload.password);
-
-      window.axios.post(state.backendUrl + '/OAuthApi/auth', params)
-        .then((response) => {
-          commit('setToken', response.data.access_token);
-          commit('setUser', response.data.user);
-          commit('setLoggedIn', true);
-        })
-        .catch((error) => {
-          console.error("Ошибка авторизации:", error);
-          commit('setLoginError', true);
-        })
-        .finally(() => {
-          commit('setPreLoading', false);
-        });
+    auth(context) {
+      context.commit('setPreLoading', true);
+      setTimeout(() => {
+        context.commit('setToken', "mock-jwt-token-12345");
+        context.commit('setLoggedIn', true);
+        context.dispatch('getUser');
+      }, 500);
     },
-
-    // --- ДЕЙСТВИЕ ИЗ ПУНКТА 3.9 (ПОЛУЧЕНИЕ ДАННЫХ + ПОИСК) ---
-    getRating({ commit, state }) {
-      console.log('Вызов действия getRating с поиском:', state.search);
-      
-      const params = new URLSearchParams();
-      // Отправляем бэкенду настройки пагинации
-      params.append('per_page', state.pager.perPage);
-      // СЮДА прикрепляем строку поиска, чтобы CodeIgniter отфильтровал SQL-запрос
-      params.append('search', state.search);
-      
-      // Выполняем POST-запрос с query-параметром текущей страницы
-      window.axios.post(state.backendUrl + '/RatingApi/rating?page_group1=' + state.pager.currentPage, params, {
-        headers: {
-          Authorization: 'Bearer ' + state.token
-        }
-      })
-      .then((response) => {
-        // Обновляем массив элементов таблицы и данные о страницах
-        commit('setRating', response.data.ratings);
-        commit('setPager', response.data.pager);
-      })
-      .catch((error) => {
-        console.error("Ошибка при поиске/выборке рейтинга через Axios:", error);
+    getUser(context) {
+      context.commit('setUser', { id: 777, username: 'administrator', group_name: 'Администратор' });
+      context.commit('setPreLoading', false);
+      router.push('/rating');
+    },
+    getRating(context) {
+      context.commit('setDataPreLoading', true);
+      setTimeout(() => { context.commit('setDataPreLoading', false); }, 200);
+    },
+    createRating({ commit, state, dispatch }, ratingData) {
+      let currentRatings = [...state.rating];
+      const newId = currentRatings.length ? Math.max(...currentRatings.map(r => r.id)) + 1 : 1;
+      currentRatings.push({
+        id: newId,
+        name: ratingData.name,
+        description: ratingData.description || '',
+        gender: ratingData.gender,
+        birthday: ratingData.birthday
       });
+      commit('setRating', currentRatings);
+      dispatch('getRating');
+    },
+    deleteRating({ commit, state, dispatch }, id) {
+      const filteredRatings = state.rating.filter(r => r.id !== id);
+      commit('setRating', filteredRatings);
+      dispatch('getRating');
     }
   }
 });
